@@ -1,0 +1,30 @@
+The modeling process starts first time you create the application DbContext. Here some underhood steps it goes :
+1. EF Core find all the public DbSet<T> properties at the app DbContext. From this, it defines the initial names for the tables it finds.
+2. EF Core looks through all the classes referred to DbSet<T> and looks at its props to work out the column names, types, and so forth.
+It also looks for special attributes on the class and properties which provide extra modeling information.
+3. EF looks for any classes DbSet<T> refers to and scans that classes too.
+4. For the last input to the modeling process EF Core runs the virtual method OnModelCreating inside the app DbContext. Here you can provide
+extra info via the fluent API to do more modeling configuration.
+5. EF Core creates an internal model of the database based on all the information it gathered. This database model is cached so the later access will be quicker.
+
+The process of read data from the database is as following:
+1. The LINQ query context.Books.AsNoTracking().Include(b => b.Author) access the DbSet<Book> prop in the app DbContext and adds a .Include
+at the end to ask that the Author parts of the relationship are loaded too.
+This is converted by database provider into SQL command to access the db. The resulting SQL is cached to avoid the cost of 
+retranslation if the same db access is used again.
+!Important: EF Core tries to be as efficient as possible on database access. 
+In this case, it combines the two tables it needs to read, Books and Author, into one big table so that it can do the job in one database access.
+2. After db provider has read the data, EF creates instances of the .NET classes and use the database foreign keys, to correctly link 
+the .NET classes together by reference - called a relationship fixup.
+3. Because the code includes the command AsNoTracking, EF Core knows to suppress the creation of a tracking snapshot.
+Because this is a read-only query, suppressing the tracking snapshot makes the command faster.
+
+The process of update data in the database:
+1. The app use a LINQ query to find a single book with author info. EF Core turns LINQ into the SQL command.
+2. No .AsNoTracking so the query is considered to be a tracked query. Therefore EF creates a tracking snapshot of the data loaded.
+3. Code change web url prop and SaveChanges is called.
+The Detect Changes stage compares all the classes that were returned from the a tracked query with the tracking snapshot.
+4. As a change is detected, EF starts a transaction.
+Every database update is done as an atomic unit: if multiple changes to the db occur, they either all succeed, or they all fail.
+5. The update request is converted into an SQL command by the database provider.
+If the SQL command is successful, the transaction is committed and the SaveChanges method returns, otherwise, an exception is raised.
